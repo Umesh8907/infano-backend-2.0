@@ -21,7 +21,7 @@ export class Badge extends Document {
     @Prop({ type: String, enum: BadgeCriteriaType, required: true })
     criteriaType: BadgeCriteriaType;
 
-    @Prop({ required: true })
+    @Prop({ type: Object, required: true })
     criteriaValue: number | string; // e.g., 500 for XP, or journeyId for completion
 
     @Prop({ type: Types.ObjectId, ref: 'Journey' })

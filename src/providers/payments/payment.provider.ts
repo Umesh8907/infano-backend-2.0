@@ -35,6 +35,10 @@ export class PaymentProvider {
         return await this.razorpay.orders.create(options);
     }
 
+    getRazorpayKeyId(): string {
+        return this.configService.get<string>('payments.razorpayKeyId') || '';
+    }
+
     verifySignature(razorpayOrderId: string, razorpayPaymentId: string, signature: string): boolean {
         const text = `${razorpayOrderId}|${razorpayPaymentId}`;
         const generatedSignature = crypto

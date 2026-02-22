@@ -5,6 +5,12 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Enable CORS for frontend communication
+  app.enableCors();
+
+  // Set global prefix to match frontend service
+  app.setGlobalPrefix('api');
+
   const config = new DocumentBuilder()
     .setTitle('Infano API')
     .setDescription('The Infano Gamified Learning Platform API')

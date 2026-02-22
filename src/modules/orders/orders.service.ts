@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Order } from './order.schema';
@@ -16,7 +16,14 @@ export class OrdersService {
 
     async createPurchaseOrder(dto: any) {
         // 1. Find or create User
-        let user = await this.userModel.findOne({ phone: dto.phone });
+        let user = await this.userModel.findOne({
+            $or: [{ phone: dto.phone }, { email: dto.email }]
+        });
+
+        if (user && user.isDashboardActive) {
+            throw new ConflictException('An active account already exists for this phone or email. Please login to your dashboard.');
+        }
+
         if (!user) {
             user = await this.userModel.create({
                 fullName: dto.fullName,
@@ -30,7 +37,7 @@ export class OrdersService {
 
         // 2. Create Razorpay Order
         // Assuming a fixed price for the kit for now
-        const kitPrice = 999;
+        const kitPrice = 1999;
         const razorpayOrder = await this.paymentProvider.createOrder(
             kitPrice,
             'INR',
@@ -51,7 +58,10 @@ export class OrdersService {
             },
         });
 
-        return razorpayOrder;
+        return {
+            order: razorpayOrder,
+            razorpayKeyId: this.paymentProvider.getRazorpayKeyId()
+        };
     }
 
     async verifyPayment(orderId: string, paymentId: string, signature: string) {

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Kit } from './kit.schema';
@@ -25,7 +25,14 @@ export class KitsService {
         }
 
         // 2. Find or Create User
-        let user = await this.userModel.findOne({ phone: dto.phone });
+        let user = await this.userModel.findOne({
+            $or: [{ phone: dto.phone }, ...(dto.email ? [{ email: dto.email }] : [])]
+        });
+
+        if (user && user.isDashboardActive) {
+            throw new ConflictException('An active account already exists for this phone or email. Please login to activate your kit.');
+        }
+
         if (!user) {
             user = await this.userModel.create({
                 fullName: dto.fullName,
@@ -36,7 +43,7 @@ export class KitsService {
                 isDashboardActive: true,
             });
         } else {
-            // Activate existing user's dashboard if not already active
+            // Activate existing user's dashboard if not already active (should be hit for inactive users)
             user.isDashboardActive = true;
             await user.save();
         }
