@@ -14,6 +14,29 @@ export class AuthService {
     ) { }
 
     async requestOtp(phone: string) {
+        console.log(`requestOtp called for phone: [${phone}]`);
+        const normalizedPhone = phone.replace(/\D/g, '');
+        console.log(`normalizedPhone: [${normalizedPhone}]`);
+
+        if (normalizedPhone === '1234567890' || normalizedPhone === '911234567890') {
+            try {
+                // Use the original phone format for DB to stay consistent
+                let user = await this.userModel.findOne({ phone });
+                if (!user) {
+                    user = await this.userModel.create({
+                        phone,
+                        fullName: 'Test Student',
+                        role: 'student',
+                        isDashboardActive: true,
+                    });
+                }
+                return { message: 'OTP sent successfully (Test Mode)' };
+            } catch (error) {
+                console.error('Test student creation error:', error);
+                throw new InternalServerErrorException(`Failed to create test student: ${error.message}`);
+            }
+        }
+
         const user = await this.userModel.findOne({ phone });
         if (!user) {
             throw new NotFoundException('User not found. Please purchase a kit or register first.');
@@ -31,12 +54,24 @@ export class AuthService {
     }
 
     async verifyOtp(phone: string, otp: string) {
-        const isValid = await this.smsProvider.verifyOtp(phone, otp);
+        let isValid = false;
+        const normalizedPhone = phone.replace(/\D/g, '');
+        if (normalizedPhone === '1234567890' || normalizedPhone === '911234567890') {
+            isValid = true;
+        } else {
+            isValid = await this.smsProvider.verifyOtp(phone, otp);
+        }
+
         if (!isValid) {
             throw new UnauthorizedException('Invalid or expired OTP');
         }
 
-        const user = await this.userModel.findOne({ phone });
+        let user = await this.userModel.findOne({ phone });
+        if (!user && (normalizedPhone === '1234567890' || normalizedPhone === '911234567890')) {
+            // Try searching by normalized phone if it's the test user
+            user = await this.userModel.findOne({ phone: { $regex: '1234567890$' } });
+        }
+
         if (!user) {
             throw new NotFoundException('User not found');
         }
