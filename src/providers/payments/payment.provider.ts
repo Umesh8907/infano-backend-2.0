@@ -47,4 +47,14 @@ export class PaymentProvider {
             .digest('hex');
         return generatedSignature === signature;
     }
+
+    verifyWebhookSignature(body: string, signature: string): boolean {
+        const secret = this.configService.get<string>('payments.razorpayWebhookSecret');
+        if (!secret) return false;
+        const expectedSignature = crypto
+            .createHmac('sha256', secret)
+            .update(body)
+            .digest('hex');
+        return expectedSignature === signature;
+    }
 }

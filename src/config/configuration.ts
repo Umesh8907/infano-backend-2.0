@@ -13,5 +13,8 @@ export default () => ({
     payments: {
         razorpayKeyId: process.env.RAZORPAY_KEY_ID || '',
         razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || '',
+        razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || 'test-secret',
+        kitPrice: parseInt(process.env.KIT_PRICE || '1999', 10),
+        useTransactions: process.env.USE_TRANSACTIONS === 'true',
     },
 });

@@ -57,6 +57,7 @@ export class KitsService {
         return {
             success: true,
             message: 'Kit activated successfully. Your dashboard is now active.',
+            code: kit.code,
             user: {
                 id: user._id,
                 fullName: user.fullName,
