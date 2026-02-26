@@ -25,6 +25,12 @@ export class User extends Document {
     @Prop({ default: false })
     isDashboardActive: boolean;
 
+    @Prop({ default: false })
+    isOnboarded: boolean;
+
+    @Prop({ type: [String], default: [] })
+    selectedInterests: string[];
+
     @Prop()
     activationCode?: string;
 }

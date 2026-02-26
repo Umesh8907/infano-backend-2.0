@@ -10,7 +10,7 @@ export class Reflection extends Document {
     questId: Types.ObjectId;
 
     @Prop({ required: true })
-    challengeId: string; // The ID of the mini-challenge item within the quest
+    itemId: string; // The ID of the item within the quest
 
     @Prop({ required: true })
     response: string; // The student's journaling/reflection text

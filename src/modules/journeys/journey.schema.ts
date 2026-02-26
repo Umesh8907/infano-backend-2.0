@@ -4,7 +4,10 @@ import { Document } from 'mongoose';
 @Schema({ timestamps: true })
 export class Journey extends Document {
     @Prop({ required: true })
-    name: string;
+    title: string;
+
+    @Prop({ required: true, unique: true })
+    slug: string;
 
     @Prop()
     description: string;

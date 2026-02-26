@@ -18,7 +18,7 @@ export class AuthService {
         const normalizedPhone = phone.replace(/\D/g, '');
         console.log(`normalizedPhone: [${normalizedPhone}]`);
 
-        if (normalizedPhone === '1234567890' || normalizedPhone === '911234567890') {
+        if (normalizedPhone === '1234567890' || normalizedPhone === '1234567891' || normalizedPhone === '911234567890') {
             try {
                 // Use the original phone format for DB to stay consistent
                 let user = await this.userModel.findOne({ phone });
@@ -56,7 +56,7 @@ export class AuthService {
     async verifyOtp(phone: string, otp: string) {
         let isValid = false;
         const normalizedPhone = phone.replace(/\D/g, '');
-        if (normalizedPhone === '1234567890' || normalizedPhone === '911234567890') {
+        if (normalizedPhone === '1234567890' || normalizedPhone === '1234567891' || normalizedPhone === '911234567890') {
             isValid = true;
         } else {
             isValid = await this.smsProvider.verifyOtp(phone, otp);
@@ -67,9 +67,9 @@ export class AuthService {
         }
 
         let user = await this.userModel.findOne({ phone });
-        if (!user && (normalizedPhone === '1234567890' || normalizedPhone === '911234567890')) {
+        if (!user && (normalizedPhone === '1234567890' || normalizedPhone === '1234567891' || normalizedPhone === '911234567890')) {
             // Try searching by normalized phone if it's the test user
-            user = await this.userModel.findOne({ phone: { $regex: '1234567890$' } });
+            user = await this.userModel.findOne({ phone: { $regex: '1234567890$|1234567891$' } });
         }
 
         if (!user) {
@@ -85,6 +85,7 @@ export class AuthService {
                 phone: user.phone,
                 role: user.role,
                 isDashboardActive: user.isDashboardActive,
+                isOnboarded: user.isOnboarded,
             },
         };
     }

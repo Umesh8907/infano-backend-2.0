@@ -7,6 +7,7 @@ import { Quest, QuestSchema } from '../quests/quest.schema';
 import { Badge, BadgeSchema } from './badge.schema';
 import { BadgeService } from './badge.service';
 import { BadgesController } from './badges.controller';
+import { Journey, JourneySchema } from '../journeys/journey.schema';
 
 @Module({
     imports: [
@@ -14,6 +15,7 @@ import { BadgesController } from './badges.controller';
             { name: UserProgress.name, schema: UserProgressSchema },
             { name: Quest.name, schema: QuestSchema },
             { name: Badge.name, schema: BadgeSchema },
+            { name: Journey.name, schema: JourneySchema },
         ]),
     ],
     controllers: [GamificationController, BadgesController],

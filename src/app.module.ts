@@ -10,6 +10,7 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { JourneysModule } from './modules/journeys/journeys.module';
 import { QuestsModule } from './modules/quests/quests.module';
 import { InsightsModule } from './modules/insights/insights.module';
+import { CheckInModule } from './modules/check-in/check-in.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { InsightsModule } from './modules/insights/insights.module';
     QuestsModule,
     GamificationModule,
     InsightsModule,
+    CheckInModule,
   ],
 })
 export class AppModule { }

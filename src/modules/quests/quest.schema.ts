@@ -108,6 +108,9 @@ export class Quest extends Document {
     @Prop({ required: true })
     title: string;
 
+    @Prop({ required: true, unique: true })
+    slug: string;
+
     @Prop()
     description: string;
 
