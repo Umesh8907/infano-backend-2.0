@@ -42,8 +42,8 @@ export class AuthService {
             throw new NotFoundException('User not found. Please purchase a kit or register first.');
         }
 
-        // Generate a 4-6 digit random OTP (user example used randomNumber)
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        // Generate a 4-digit random OTP
+        const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
         const success = await this.smsProvider.sendOtp(phone, otp);
         if (!success) {
