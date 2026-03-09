@@ -97,7 +97,13 @@ export class UserProgressService {
         // 3. Find or create progress for this specific quest
         let qProgress = progress.questProgress.find(qp => qp.questId.toString() === questId);
         if (!qProgress) {
-            qProgress = { questId: new Types.ObjectId(questId), completedItems: [], isCompleted: false };
+            qProgress = {
+                questId: new Types.ObjectId(questId),
+                completedItems: [],
+                isCompleted: false,
+                lastViewedItemId: new Types.ObjectId(itemId),
+                lastViewedAt: new Date(),
+            };
             progress.questProgress.push(qProgress);
         }
 
@@ -107,7 +113,7 @@ export class UserProgressService {
 
         // 1. Check if already completed
         const itemObjectId = new Types.ObjectId(itemId);
-        if (qProgress.completedItems.some(ci => ci.itemId.equals(itemObjectId))) {
+        if (qProgress!.completedItems.some(ci => ci.itemId.equals(itemObjectId))) {
             return progress; // Already done
         }
 
@@ -115,14 +121,14 @@ export class UserProgressService {
         if (itemIndex > 0) {
             for (let i = 0; i < itemIndex; i++) {
                 const prevItemId = (quest.items[i] as any)._id;
-                if (!qProgress.completedItems.some(ci => ci.itemId.equals(prevItemId))) {
+                if (!qProgress!.completedItems.some(ci => ci.itemId.equals(prevItemId))) {
                     throw new BadRequestException(`Must complete previous item: ${quest.items[i].title}`);
                 }
             }
         }
 
         // 3. Mark as completed and Award XP
-        qProgress.completedItems.push({
+        qProgress!.completedItems.push({
             itemId: itemObjectId,
             isCompleted: true,
             completedAt: new Date()
@@ -132,8 +138,8 @@ export class UserProgressService {
         progress.lastAccessedAt = new Date();
 
         // 4. Check if quest is fully completed
-        if (qProgress.completedItems.length === quest.items.length) {
-            qProgress.isCompleted = true;
+        if (qProgress!.completedItems.length === quest.items.length) {
+            qProgress!.isCompleted = true;
         }
 
         // 5. Check if journey is fully completed
@@ -172,7 +178,13 @@ export class UserProgressService {
 
         let qProgress = progress.questProgress.find(qp => qp.questId.toString() === questId);
         if (!qProgress) {
-            qProgress = { questId: new Types.ObjectId(questId), completedItems: [], isCompleted: false } as any;
+            qProgress = {
+                questId: new Types.ObjectId(questId),
+                completedItems: [],
+                isCompleted: false,
+                lastViewedItemId: new Types.ObjectId(itemId),
+                lastViewedAt: new Date(),
+            };
             progress.questProgress.push(qProgress);
         }
 
