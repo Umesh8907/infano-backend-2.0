@@ -18,6 +18,12 @@ export class QuestProgress {
     @Prop({ type: Types.ObjectId, ref: 'Quest', required: true })
     questId: Types.ObjectId;
 
+    @Prop({ type: Types.ObjectId })
+    lastViewedItemId: Types.ObjectId;
+
+    @Prop({ type: Date })
+    lastViewedAt: Date;
+
     @Prop({ type: [QuestItemProgress], default: [] })
     completedItems: QuestItemProgress[];
 

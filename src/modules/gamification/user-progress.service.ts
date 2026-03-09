@@ -40,6 +40,40 @@ export class UserProgressService {
         return progress;
     }
 
+    async getLatestOverview(userId: string) {
+        const progress = await this.progressModel
+            .findOne({ userId: new Types.ObjectId(userId) })
+            .sort({ lastAccessedAt: -1, updatedAt: -1, createdAt: -1 })
+            .exec();
+
+        if (!progress) {
+            return null;
+        }
+
+        const journey = await this.journeyModel.findById(progress.journeyId).exec();
+        if (!journey) {
+            throw new NotFoundException('Journey not found for progress record');
+        }
+
+        const totalQuestsInJourney = await this.questModel.countDocuments({
+            journeyId: progress.journeyId,
+            isActive: true,
+        });
+        const completedQuestsCount = progress.questProgress.filter(qp => qp.isCompleted).length;
+
+        return {
+            journeyId: (journey._id as any).toString(),
+            journeySlug: (journey as any).slug,
+            journeyTitle: journey.title,
+            journeyDescription: journey.description,
+            thumbnailUrl: journey.thumbnailUrl,
+            totalQuests: totalQuestsInJourney,
+            completedQuests: completedQuestsCount,
+            totalXp: progress.totalXp,
+            isJourneyCompleted: progress.isJourneyCompleted,
+        };
+    }
+
     async completeQuestItem(userId: string, journeyIdOrSlug: string, questIdOrSlug: string, itemId: string) {
         // 1. Resolve Quest ID
         let questId = questIdOrSlug;
@@ -66,6 +100,10 @@ export class UserProgressService {
             qProgress = { questId: new Types.ObjectId(questId), completedItems: [], isCompleted: false };
             progress.questProgress.push(qProgress);
         }
+
+        // Track last viewed item for resume (even on completion)
+        (qProgress as any).lastViewedItemId = new Types.ObjectId(itemId);
+        (qProgress as any).lastViewedAt = new Date();
 
         // 1. Check if already completed
         const itemObjectId = new Types.ObjectId(itemId);
@@ -109,6 +147,39 @@ export class UserProgressService {
         await this.badgeService.checkAndAwardBadges(userId, resolvedJourneyId, progress);
 
         // Since it's a nested array, we need to tell Mongoose it modified
+        progress.markModified('questProgress');
+        return await progress.save();
+    }
+
+    async setLastViewedItem(userId: string, journeyIdOrSlug: string, questIdOrSlug: string, itemId: string) {
+        // Resolve quest
+        let questId = questIdOrSlug;
+        let quest: any;
+
+        if (Types.ObjectId.isValid(questIdOrSlug)) {
+            quest = await this.questModel.findById(questIdOrSlug).exec();
+        } else {
+            quest = await this.questModel.findOne({ slug: questIdOrSlug }).exec();
+            if (quest) questId = (quest._id as any).toString();
+        }
+        if (!quest) throw new NotFoundException('Quest not found');
+
+        const progress = await this.getProgress(userId, journeyIdOrSlug);
+
+        // Ensure the item exists in the quest (prevents garbage IDs)
+        const exists = quest.items.some(item => (item as any)._id.toString() === itemId);
+        if (!exists) throw new NotFoundException('Quest item not found');
+
+        let qProgress = progress.questProgress.find(qp => qp.questId.toString() === questId);
+        if (!qProgress) {
+            qProgress = { questId: new Types.ObjectId(questId), completedItems: [], isCompleted: false } as any;
+            progress.questProgress.push(qProgress);
+        }
+
+        (qProgress as any).lastViewedItemId = new Types.ObjectId(itemId);
+        (qProgress as any).lastViewedAt = new Date();
+        progress.lastAccessedAt = new Date();
+
         progress.markModified('questProgress');
         return await progress.save();
     }

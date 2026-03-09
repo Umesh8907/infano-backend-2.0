@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Razorpay from 'razorpay';
+const Razorpay = require('razorpay');
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -41,8 +41,10 @@ export class PaymentProvider {
 
     verifySignature(razorpayOrderId: string, razorpayPaymentId: string, signature: string): boolean {
         const text = `${razorpayOrderId}|${razorpayPaymentId}`;
+        const secret = this.configService.get<string>('payments.razorpayKeySecret');
+        if (!secret) return false;
         const generatedSignature = crypto
-            .createHmac('sha256', this.configService.get<string>('payments.razorpayKeySecret')!)
+            .createHmac('sha256', secret)
             .update(text)
             .digest('hex');
         return generatedSignature === signature;

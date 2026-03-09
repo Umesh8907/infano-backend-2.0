@@ -10,6 +10,12 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class GamificationController {
     constructor(private readonly progressService: UserProgressService) { }
 
+    @Get()
+    @ApiOperation({ summary: 'Get latest journey progress overview for current user' })
+    async getLatestOverview(@Req() req: any) {
+        return await this.progressService.getLatestOverview(req.user.userId);
+    }
+
     @Get(':journeyId')
     @ApiOperation({ summary: 'Get current user progress for a journey' })
     async getProgress(@Param('journeyId') journeyId: string, @Req() req: any) {
@@ -27,5 +33,16 @@ export class GamificationController {
         @Req() req: any,
     ) {
         return await this.progressService.completeQuestItem(req.user.userId, journeyId, questId, itemId);
+    }
+
+    @Post(':journeyId/quests/:questId/items/:itemId/last-viewed')
+    @ApiOperation({ summary: 'Save last viewed quest item for resume' })
+    async setLastViewedItem(
+        @Param('journeyId') journeyId: string,
+        @Param('questId') questId: string,
+        @Param('itemId') itemId: string,
+        @Req() req: any,
+    ) {
+        return await this.progressService.setLastViewedItem(req.user.userId, journeyId, questId, itemId);
     }
 }

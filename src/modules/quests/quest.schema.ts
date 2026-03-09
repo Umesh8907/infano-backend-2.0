@@ -15,6 +15,8 @@ class StoryHookContent {
     @Prop({ required: true })
     text: string;
     @Prop()
+    subtitle: string;
+    @Prop()
     imageUrl: string;
 }
 
@@ -26,6 +28,8 @@ class KnowledgeCheckQuestion {
     options: string[];
     @Prop({ required: true })
     correctOptionIndex: number;
+    @Prop()
+    feedback: string;
 }
 
 @Schema({ _id: false })
@@ -64,6 +68,8 @@ class LearningCardsContent {
 class MiniChallengeContent {
     @Prop({ required: true })
     question: string;
+    @Prop()
+    placeholder: string;
 }
 
 @Schema({ _id: false })

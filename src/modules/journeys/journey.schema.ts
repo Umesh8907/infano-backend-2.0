@@ -15,6 +15,15 @@ export class Journey extends Document {
     @Prop()
     bannerImage: string;
 
+    @Prop()
+    thumbnailUrl: string;
+
+    @Prop({ default: 0 })
+    totalXP: number;
+
+    @Prop()
+    category: string;
+
     @Prop({ default: true })
     isActive: boolean;
 }
