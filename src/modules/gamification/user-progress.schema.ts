@@ -11,6 +11,9 @@ export class QuestItemProgress {
 
     @Prop({ default: Date.now })
     completedAt: Date;
+
+    @Prop({ type: Object })
+    submissionData: any;
 }
 
 @Schema({ _id: false })

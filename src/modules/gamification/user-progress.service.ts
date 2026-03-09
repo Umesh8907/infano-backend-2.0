@@ -74,7 +74,7 @@ export class UserProgressService {
         };
     }
 
-    async completeQuestItem(userId: string, journeyIdOrSlug: string, questIdOrSlug: string, itemId: string) {
+    async completeQuestItem(userId: string, journeyIdOrSlug: string, questIdOrSlug: string, itemId: string, submissionData?: any, isCompleted: boolean = true) {
         // 1. Resolve Quest ID
         let questId = questIdOrSlug;
         let quest: any;
@@ -113,12 +113,38 @@ export class UserProgressService {
 
         // 1. Check if already completed
         const itemObjectId = new Types.ObjectId(itemId);
-        if (qProgress!.completedItems.some(ci => ci.itemId.equals(itemObjectId))) {
-            return progress; // Already done
+        const existingCompletion = qProgress!.completedItems.find(ci => ci.itemId.equals(itemObjectId));
+
+        if (existingCompletion) {
+            // Update submission data
+            existingCompletion.submissionData = submissionData;
+            existingCompletion.completedAt = new Date();
+            // If transitioning from partial to full completion, handle XP
+            if (isCompleted && !(existingCompletion as any).isCompleted) {
+                (existingCompletion as any).isCompleted = true;
+                progress.totalXp += quest.items[itemIndex].xpReward;
+                progress.lastAccessedAt = new Date();
+                const completedItemIds = new Set(
+                    (qProgress!.completedItems as any[])
+                        .filter(ci => ci.isCompleted === true)
+                        .map(ci => ci.itemId.toString())
+                );
+                if (completedItemIds.size === quest.items.length) {
+                    qProgress!.isCompleted = true;
+                }
+                const totalQuestsInJourney = await this.questModel.countDocuments({ journeyId: progress.journeyId, isActive: true });
+                const completedQuestsCount = progress.questProgress.filter(qp => qp.isCompleted).length;
+                if (completedQuestsCount >= totalQuestsInJourney) {
+                    progress.isJourneyCompleted = true;
+                }
+                await this.badgeService.checkAndAwardBadges(userId, resolvedJourneyId, progress);
+            }
+            progress.markModified('questProgress');
+            return await (progress as any).save();
         }
 
-        // 2. Enforce Order: Check if previous items in this quest are completed
-        if (itemIndex > 0) {
+        // 2. Enforce Order: only for full completion
+        if (isCompleted && itemIndex > 0) {
             for (let i = 0; i < itemIndex; i++) {
                 const prevItemId = (quest.items[i] as any)._id;
                 if (!qProgress!.completedItems.some(ci => ci.itemId.equals(prevItemId))) {
@@ -127,30 +153,50 @@ export class UserProgressService {
             }
         }
 
-        // 3. Mark as completed and Award XP
-        qProgress!.completedItems.push({
-            itemId: itemObjectId,
-            isCompleted: true,
-            completedAt: new Date()
-        });
-
-        progress.totalXp += quest.items[itemIndex].xpReward;
-        progress.lastAccessedAt = new Date();
-
-        // 4. Check if quest is fully completed
-        if (qProgress!.completedItems.length === quest.items.length) {
-            qProgress!.isCompleted = true;
+        // 3. Mark as completed (or partial) and conditionally Award XP
+        if (!existingCompletion) {
+            qProgress!.completedItems.push({
+                itemId: itemObjectId,
+                isCompleted: isCompleted,
+                completedAt: new Date(),
+                submissionData,
+            });
         }
 
-        // 5. Check if journey is fully completed
-        const totalQuestsInJourney = await this.questModel.countDocuments({ journeyId: progress.journeyId, isActive: true });
-        const completedQuestsCount = progress.questProgress.filter(qp => qp.isCompleted).length;
-        if (completedQuestsCount >= totalQuestsInJourney) {
-            progress.isJourneyCompleted = true;
-        }
+        // Only award XP and check for quest completion if marking fully completed
+        if (isCompleted) {
+            // If it was previously partial, mark it full now
+            if (existingCompletion) {
+                (existingCompletion as any).isCompleted = true;
+            }
 
-        // 6. Check for new badges
-        await this.badgeService.checkAndAwardBadges(userId, resolvedJourneyId, progress);
+            progress.totalXp += quest.items[itemIndex].xpReward;
+            progress.lastAccessedAt = new Date();
+
+            // 4. Check if quest is fully completed
+            // Count only unique quest items that have been fully completed (isCompleted: true)
+            const completedItemIds = new Set(
+                (qProgress!.completedItems as any[])
+                    .filter(ci => ci.isCompleted === true)
+                    .map(ci => ci.itemId.toString())
+            );
+            if (completedItemIds.size === quest.items.length) {
+                qProgress!.isCompleted = true;
+            }
+
+            // 5. Check if journey is fully completed
+            const totalQuestsInJourney = await this.questModel.countDocuments({ journeyId: progress.journeyId, isActive: true });
+            const completedQuestsCount = progress.questProgress.filter(qp => qp.isCompleted).length;
+            if (completedQuestsCount >= totalQuestsInJourney) {
+                progress.isJourneyCompleted = true;
+            }
+
+            // 6. Check for new badges
+            await this.badgeService.checkAndAwardBadges(userId, resolvedJourneyId, progress);
+        } else {
+            // If partial update, just update timestamp
+            progress.lastAccessedAt = new Date();
+        }
 
         // Since it's a nested array, we need to tell Mongoose it modified
         progress.markModified('questProgress');

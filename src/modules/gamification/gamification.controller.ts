@@ -31,8 +31,9 @@ export class GamificationController {
         @Param('questId') questId: string,
         @Param('itemId') itemId: string,
         @Req() req: any,
+        @Body() body: any,
     ) {
-        return await this.progressService.completeQuestItem(req.user.userId, journeyId, questId, itemId);
+        return await this.progressService.completeQuestItem(req.user.userId, journeyId, questId, itemId, body.submissionData, body.isCompleted);
     }
 
     @Post(':journeyId/quests/:questId/items/:itemId/last-viewed')
