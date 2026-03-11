@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Cycle, CycleDocument } from '../schemas/cycle.schema';
@@ -6,66 +6,94 @@ import { DailyLog, DailyLogDocument } from '../schemas/daily-log.schema';
 
 @Injectable()
 export class PredictionEngineService {
-  private readonly POPULATION_AVG_CYCLE = 28;
-  private readonly MIN_CYCLE_LENGTH = 21;
-  private readonly MAX_CYCLE_LENGTH = 35;
+  private readonly logger = new Logger(PredictionEngineService.name);
+
+  // Population Priors for adolescents (based on research 21-35 days)
+  private readonly POPULATION_MEAN = 28;
+  private readonly POPULATION_STD_DEV = 4;
 
   constructor(
     @InjectModel(Cycle.name) private cycleModel: Model<CycleDocument>,
     @InjectModel(DailyLog.name) private logModel: Model<DailyLogDocument>,
   ) {}
 
-  /**
-   * Calculates the next predicted period date based on historical data.
-   * Uses population priors for new users and shifts to Bayesian updating for returning users.
-   */
-  async predictNextCycle(userId: string): Promise<{ predictedDate: Date | null; confidence: number }> {
-    const historicalCycles = await this.cycleModel
-      .find({ userId: userId } as any)
-      .sort({ startDate: -1 })
-      .limit(6)
-      .exec();
+  async predictNextCycle(userId: string): Promise<{ predictedDate: Date; confidence: number; reason?: string }> {
+    const userObjectId = new Types.ObjectId(userId);
+    const history = await this.cycleModel.find({ userId: userObjectId as any }).sort({ startDate: -1 }).limit(12);
 
-    if (historicalCycles.length === 0) {
-      // First timer - use population priors with low confidence
-      return {
-        predictedDate: null, // Needs at least one start date to predict
-        confidence: 0.1,
-      };
+    let baseCycleLength = this.POPULATION_MEAN;
+    let confidence = 0.3;
+    let reason = 'Initial estimate based on scientific averages';
+
+    if (history.length > 0) {
+      const completedCycles = history.filter(c => c.cycleLength);
+      
+      if (completedCycles.length >= 2) {
+        const userMean = this.calculateAverageLength(history);
+        const userStdDev = this.calculateVariance(history, userMean);
+        
+        // Bayesian Weighting: Higher weight to user history as more data arrives
+        const weight = Math.min(completedCycles.length / 10, 0.8);
+        baseCycleLength = (this.POPULATION_MEAN * (1 - weight)) + (userMean * weight);
+        
+        // Confidence increases with consistency (lower std dev) and history length
+        const consistencyFactor = Math.max(0, 1 - (userStdDev / 10));
+        confidence = Math.min(0.4 + (completedCycles.length * 0.05) + (consistencyFactor * 0.3), 0.95);
+        reason = completedCycles.length > 5 ? 'High-accuracy personalized pattern' : 'Personalized rhythm analysis';
+
+        if (userStdDev > 6) {
+            reason += ' (Highly irregular patterns detected)';
+            confidence -= 0.15;
+        }
+      } else {
+        confidence = 0.45;
+        reason = 'Learning your unique rhythm';
+      }
     }
 
-    if (historicalCycles.length < 3) {
-      // Learning phase
-      const lastCycle = historicalCycles[0];
-      const avgLength = this.calculateAverageLength(historicalCycles);
-      const predictedDate = new Date(lastCycle.startDate);
-      predictedDate.setDate(predictedDate.getDate() + avgLength);
+    // --- Dynamic Behavioral Adjustments ---
+    const recentLogs = await this.logModel.find({
+        userId: userObjectId as any,
+        date: { $gte: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000) }
+    }).sort({ date: -1 });
 
-      return {
-        predictedDate,
-        confidence: 0.3 * historicalCycles.length,
-      };
+    // Stress & Lifestyle Correlation
+    const stressLogs = recentLogs.filter(l => l.mood === 'stressed' || l.mood === 'low');
+    if (stressLogs.length >= 4) {
+        const delay = Math.min(stressLogs.length - 2, 4);
+        baseCycleLength += delay;
+        confidence -= 0.05;
+        reason += ` (+${delay}d adjustment for recent stress patterns)`;
     }
 
-    // Hybrid Analysis (Phase 2/3)
-    const avgLength = this.calculateAverageLength(historicalCycles);
-    const lastCycle = historicalCycles[0];
+    // Energy & Activity Correlation
+    const extremeEnergyLogs = recentLogs.filter(l => (l.energy || 5) > 8 || (l.energy || 5) < 3);
+    if (extremeEnergyLogs.length >= 5) {
+        confidence -= 0.05;
+        reason += ' (Fluctuating energy levels detected)';
+    }
+
+    const lastCycle = history[0];
+    const latestStart = lastCycle ? lastCycle.startDate : new Date();
     
-    // Simple Bayesian Update emulation: adjust prediction based on recent variability
-    const variance = this.calculateVariance(historicalCycles, avgLength);
-    const confidence = Math.max(0.1, Math.min(0.9, 0.9 - (variance / 10)));
+    // Ensure we don't predict a date in the past
+    let predictedDate = new Date(latestStart.getTime() + baseCycleLength * 24 * 60 * 60 * 1000);
+    if (predictedDate < new Date()) {
+        predictedDate = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000); // Minimum 1 day ahead
+    }
 
-    const predictedDate = new Date(lastCycle.startDate);
-    predictedDate.setDate(predictedDate.getDate() + Math.round(avgLength));
-
-    return { predictedDate, confidence };
+    return { 
+        predictedDate, 
+        confidence: Math.max(confidence, 0.1),
+        reason
+    };
   }
 
   private calculateAverageLength(cycles: CycleDocument[]): number {
-    if (cycles.length === 0) return this.POPULATION_AVG_CYCLE;
+    if (cycles.length === 0) return this.POPULATION_MEAN;
     
     const validCycles = cycles.filter(c => c.cycleLength);
-    if (validCycles.length === 0) return this.POPULATION_AVG_CYCLE;
+    if (validCycles.length === 0) return this.POPULATION_MEAN;
 
     const sum = validCycles.reduce((acc, curr) => acc + Number(curr.cycleLength), 0);
     return sum / validCycles.length;

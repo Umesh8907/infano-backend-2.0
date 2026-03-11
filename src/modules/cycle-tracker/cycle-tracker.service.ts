@@ -14,6 +14,7 @@ export class CycleTrackerService {
     @InjectModel(Cycle.name) private cycleModel: Model<CycleDocument>,
     @InjectModel(DailyLog.name) private logModel: Model<DailyLogDocument>,
     @InjectModel(Insight.name) private insightModel: Model<InsightDocument>,
+    @InjectModel('Education') private educationModel: Model<any>,
     private predictionEngine: PredictionEngineService,
   ) {}
 
@@ -110,30 +111,117 @@ export class CycleTrackerService {
     const userObjectId = new Types.ObjectId(userId);
     const logs = await this.logModel.find({ userId: userObjectId as any }).sort({ date: -1 }).limit(30);
     
-    if (logs.length < 5) return; // Need at least some logs
+    if (logs.length < 3) return;
 
-    // Example Insight: Mood Trend
-    const moods = logs.map(l => l.mood).filter(Boolean);
-    const moodCounts = moods.reduce((acc, m) => {
-      acc[m] = (acc[m] || 0) + 1;
-      return acc;
+    const insights: any[] = [];
+
+    // Symptom Analysis
+    const recentSymptoms = logs.flatMap(l => l.symptoms || []);
+    const symptomFreq = recentSymptoms.reduce((acc, s) => {
+        acc[s] = (acc[s] || 0) + 1;
+        return acc;
     }, {});
 
-    const dominantMood = Object.keys(moodCounts).reduce((a, b) => moodCounts[a] > moodCounts[b] ? a : b);
+    const topSymptom = Object.keys(symptomFreq).sort((a,b) => symptomFreq[b] - symptomFreq[a])[0];
+    if (topSymptom) {
+        insights.push({
+            type: 'symptom_alert',
+            title: `Managing ${topSymptom}`,
+            summary: `We've noticed ${topSymptom} appearing in ${symptomFreq[topSymptom]} of your recent logs.`,
+            advice: this.getSymptomAdvice(topSymptom),
+        });
+    }
 
-    await this.insightModel.findOneAndUpdate(
-      { userId: userObjectId as any, type: 'mood_pattern' },
-      {
-        value: { moodCounts, dominantMood },
-        summary: `You've been feeling mostly ${dominantMood} lately.`,
-        generatedDate: new Date()
-      },
-      { upsert: true }
-    );
+    // Energy & Mood Correlation
+    const avgEnergy = logs.reduce((acc, l) => acc + (l.energy || 5), 0) / logs.length;
+    if (avgEnergy < 4) {
+        insights.push({
+            type: 'lifestyle_tip',
+            title: 'Energy Restoration',
+            summary: 'Your energy levels have been lower than usual this week.',
+            advice: 'Consider increasing your iron intake and prioritizing 8+ hours of sleep during this phase.',
+        });
+    }
+
+    // Save/Update newest insights
+    for (const insight of insights) {
+        await this.insightModel.findOneAndUpdate(
+            { userId: userObjectId as any, type: insight.type },
+            {
+                ...insight,
+                generatedDate: new Date()
+            },
+            { upsert: true }
+        );
+    }
+  }
+
+  private getSymptomAdvice(symptom: string): string {
+    const adviceMap = {
+        'Cramps': 'Try magnesium-rich foods like dark chocolate or a warm heating pad.',
+        'Headache': 'Stay extra hydrated and consider lowering screen time today.',
+        'Bloating': 'Peppermint tea and light walking can help ease discomfort.',
+        'Acne': 'Focus on gentle cleansing and stay hydrated.',
+        'Tiredness': 'Listen to your body; it is okay to take it slow today.',
+    };
+    return adviceMap[symptom] || 'Keep tracking to see more personalized patterns.';
   }
 
   async getInsights(userId: string) {
     const userObjectId = new Types.ObjectId(userId);
     return this.insightModel.find({ userId: userObjectId as any }).sort({ generatedDate: -1 });
+  }
+
+  async getCalendar(userId: string) {
+    const userObjectId = new Types.ObjectId(userId);
+    
+    // Get last 6 months of historical cycles
+    const cycles = await this.cycleModel.find({ userId: userObjectId as any })
+      .sort({ startDate: -1 })
+      .limit(6);
+      
+    // Get daily logs for the last 30 days
+    const logs = await this.logModel.find({
+      userId: userObjectId as any,
+      date: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+    }).sort({ date: 1 });
+
+    return {
+      cycles,
+      logs
+    };
+  }
+
+  async getEducationCards(phase: string) {
+    return this.educationModel.find({ 
+      $or: [{ targetPhase: phase }, { targetPhase: 'General' }] 
+    }).limit(3);
+  }
+
+  async updateCycle(userId: string, cycleId: string, updateData: Partial<Cycle>) {
+    const userObjectId = new Types.ObjectId(userId);
+    const cycle = await this.cycleModel.findOne({ _id: cycleId, userId: userObjectId as any });
+    
+    if (cycle) {
+      Object.assign(cycle, updateData);
+      if (updateData.startDate && updateData.endDate) {
+        cycle.cycleLength = Math.round((updateData.endDate.getTime() - updateData.startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+      }
+      return cycle.save();
+    }
+    return null;
+  }
+
+  async seedEducation() {
+    const count = await this.educationModel.countDocuments();
+    if (count > 0) return;
+
+    const cards = [
+      { title: 'Why periods happen', category: 'Biology', content: 'Your body is preparing for a potential journey. Every month, the uterus builds a cozy lining...', targetPhase: 'Menstrual', icon: 'Flower' },
+      { title: 'Energy is rising!', category: 'Self-care', content: 'During the Follicular phase, your estrogen levels go up, making you feel more energetic and social.', targetPhase: 'Follicular', icon: 'Zap' },
+      { title: 'Understanding Mood Swings', category: 'Health', content: 'It is normal to feel more sensitive during the Luteal phase. Be extra kind to yourself today.', targetPhase: 'Luteal', icon: 'Heart' },
+    ];
+
+    await this.educationModel.insertMany(cards);
   }
 }

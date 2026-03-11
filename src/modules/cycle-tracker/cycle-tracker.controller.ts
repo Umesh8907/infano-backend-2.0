@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, UseGuards, Request, Param } from '@nestjs/common';
 import { CycleTrackerService } from './cycle-tracker.service';
 import { CreateDailyLogDto } from './dto/create-daily-log.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -31,5 +31,33 @@ export class CycleTrackerController {
   @ApiOperation({ summary: 'Get AI-generated cycle patterns and insights' })
   async getInsights(@Request() req) {
     return this.trackerService.getInsights(req.user.userId);
+  }
+
+  @Get('calendar')
+  @ApiOperation({ summary: 'Get historical and predicted cycle dates' })
+  async getCalendar(@Request() req) {
+    return this.trackerService.getCalendar(req.user.userId);
+  }
+
+  @Get('education')
+  @ApiOperation({ summary: 'Get phase-specific microlearning content' })
+  async getEducation(@Request() req) {
+    const status = await this.trackerService.getDashboard(req.user.userId);
+    const phase = status.status === 'ACTIVE' ? status.phase : 'General';
+    return this.trackerService.getEducationCards(phase || 'General');
+  }
+
+  @Patch('cycle/:id')
+  @ApiOperation({ summary: 'Update/Correct historical cycle dates' })
+  async updateCycle(@Request() req, @Param('id') id: string, @Body() updateData: any) {
+    if (updateData.startDate) updateData.startDate = new Date(updateData.startDate);
+    if (updateData.endDate) updateData.endDate = new Date(updateData.endDate);
+    return this.trackerService.updateCycle(req.user.userId, id, updateData);
+  }
+
+  @Post('seed-education')
+  @ApiOperation({ summary: 'Seed initial microlearning content' })
+  async seedEducation() {
+    return this.trackerService.seedEducation();
   }
 }
