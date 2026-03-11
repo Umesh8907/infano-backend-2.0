@@ -16,6 +16,7 @@ import { CheckInModule } from './modules/check-in/check-in.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: `.env.${process.env.NODE_ENV || 'local'}`,
       load: [configuration],
     }),
     MongooseModule.forRootAsync({
