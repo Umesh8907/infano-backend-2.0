@@ -282,6 +282,16 @@ export class CycleTrackerService {
     });
   }
 
+  async resetTrackerData(userId: string) {
+    const userObjectId = new Types.ObjectId(userId);
+    await Promise.all([
+      this.cycleModel.deleteMany({ userId: userObjectId as any }),
+      this.logModel.deleteMany({ userId: userObjectId as any }),
+      this.insightModel.deleteMany({ userId: userObjectId as any }),
+    ]);
+    return { success: true };
+  }
+
   async getCalendar(userId: string) {
     const userObjectId = new Types.ObjectId(userId);
     

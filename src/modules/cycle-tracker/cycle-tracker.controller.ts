@@ -1,6 +1,7 @@
-import { Controller, Post, Get, Patch, Body, UseGuards, Request, Param } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, UseGuards, Request, Param } from '@nestjs/common';
 import { CycleTrackerService } from './cycle-tracker.service';
 import { CreateDailyLogDto } from './dto/create-daily-log.dto';
+import { OnboardCycleDto } from './dto/onboard-cycle.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 
@@ -10,6 +11,22 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 @Controller('cycle-tracker')
 export class CycleTrackerController {
   constructor(private readonly trackerService: CycleTrackerService) {}
+
+  @Post('onboard')
+  @ApiOperation({ summary: 'Onboard a new user with their last period details' })
+  async onboard(@Request() req, @Body() dto: OnboardCycleDto) {
+    return this.trackerService.onboard(req.user.userId, {
+      lastPeriodStart: dto.lastPeriodStart,
+      periodLength: dto.periodLength,
+      usualCycleLength: dto.usualCycleLength,
+    });
+  }
+
+  @Delete('reset')
+  @ApiOperation({ summary: 'Reset all tracker data for the user' })
+  async resetData(@Request() req) {
+    return this.trackerService.resetTrackerData(req.user.userId);
+  }
 
   @Post('log')
   @ApiOperation({ summary: 'Log daily cycle data (mood, symptoms, flow, etc.)' })
