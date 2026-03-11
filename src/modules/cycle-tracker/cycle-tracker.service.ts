@@ -53,6 +53,13 @@ export class CycleTrackerService {
     if (lastCycle && !lastCycle.endDate) {
       lastCycle.endDate = new Date(startDate.getTime() - 24 * 60 * 60 * 1000);
       lastCycle.cycleLength = Math.round((lastCycle.endDate.getTime() - lastCycle.startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+      // Compute actual period length from daily flow logs
+      const periodLogs = await this.logModel.find({
+        userId: userObjectId as any,
+        date: { $gte: lastCycle.startDate, $lte: lastCycle.endDate },
+        flowLevel: { $ne: 'none' },
+      });
+      lastCycle.periodLength = periodLogs.length || 5;
       await lastCycle.save();
     }
 
@@ -78,22 +85,39 @@ export class CycleTrackerService {
 
     const today = new Date();
     const cycleDay = Math.round((today.getTime() - lastCycle.startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
-    const phase = this.determinePhase(cycleDay, Number(lastCycle.cycleLength || 28));
+    const cycleLength = Number(lastCycle.cycleLength || 28);
+    const periodLength = Number(lastCycle.periodLength || 5);
+    const phase = this.determinePhase(cycleDay, cycleLength, periodLength);
+    const ovulation = this.getOvulationWindow(lastCycle.startDate, cycleLength);
 
     return {
       status: 'ACTIVE',
       cycleDay,
-      predictedNextPeriod: lastCycle.predictedNextDate,
-      confidence: lastCycle.confidenceScore,
+      cycleLength,
+      periodLength,
+      nextPeriodDate: lastCycle.predictedNextDate,
+      predictionConfidence: lastCycle.confidenceScore,
       phase,
       tips: this.getPhaseTips(phase),
+      ovulationWindowStart: ovulation.start,
+      ovulationWindowEnd: ovulation.end,
     };
   }
 
-  private determinePhase(day: number, totalLength: number): string {
-    if (day <= 5) return 'Menstrual';
-    if (day <= 13) return 'Follicular';
-    if (day <= 16) return 'Ovulatory';
+  private getOvulationWindow(cycleStart: Date, cycleLength: number): { start: Date; end: Date } {
+    // Ovulation typically occurs around 14 days BEFORE the next period
+    const ovulationDay = cycleLength - 14;
+    const start = new Date(cycleStart.getTime() + (ovulationDay - 2) * 24 * 60 * 60 * 1000);
+    const end = new Date(cycleStart.getTime() + (ovulationDay + 2) * 24 * 60 * 60 * 1000);
+    return { start, end };
+  }
+
+  private determinePhase(day: number, cycleLength: number, periodLength: number): string {
+    if (day <= periodLength) return 'Menstrual';
+    const follicularEnd = Math.round(cycleLength * 0.45);
+    const ovulatoryEnd = Math.round(cycleLength * 0.55);
+    if (day <= follicularEnd) return 'Follicular';
+    if (day <= ovulatoryEnd) return 'Ovulatory';
     return 'Luteal';
   }
 
@@ -143,6 +167,20 @@ export class CycleTrackerService {
         });
     }
 
+    // Period incoming alert
+    const dashboard = await this.getDashboard(userId);
+    if (dashboard.status === 'ACTIVE' && dashboard.nextPeriodDate) {
+      const daysUntilPeriod = Math.round((new Date(dashboard.nextPeriodDate).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+      if (daysUntilPeriod >= 0 && daysUntilPeriod <= 3) {
+        insights.push({
+          type: 'period_incoming',
+          title: 'Period in ~' + daysUntilPeriod + ' day(s)',
+          summary: 'Based on your tracked history, your period is expected very soon.',
+          advice: 'Stock up on your essentials: pads, pain relief, and some self-care treats.',
+        });
+      }
+    }
+
     // Save/Update newest insights
     for (const insight of insights) {
         await this.insightModel.findOneAndUpdate(
@@ -170,6 +208,17 @@ export class CycleTrackerService {
   async getInsights(userId: string) {
     const userObjectId = new Types.ObjectId(userId);
     return this.insightModel.find({ userId: userObjectId as any }).sort({ generatedDate: -1 });
+  }
+
+  async getTodayLog(userId: string) {
+    const userObjectId = new Types.ObjectId(userId);
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
+    return this.logModel.findOne({
+      userId: userObjectId as any,
+      date: { $gte: startOfDay, $lte: endOfDay },
+    });
   }
 
   async getCalendar(userId: string) {
@@ -204,12 +253,16 @@ export class CycleTrackerService {
     
     if (cycle) {
       Object.assign(cycle, updateData);
-      if (updateData.startDate && updateData.endDate) {
-        cycle.cycleLength = Math.round((updateData.endDate.getTime() - updateData.startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+      if (cycle.startDate && cycle.endDate) {
+        cycle.cycleLength = Math.round((cycle.endDate.getTime() - cycle.startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
       }
       return cycle.save();
     }
     return null;
+  }
+
+  async getAllEducation() {
+    return this.educationModel.find();
   }
 
   async seedEducation() {

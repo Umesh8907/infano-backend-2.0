@@ -33,6 +33,12 @@ export class CycleTrackerController {
     return this.trackerService.getInsights(req.user.userId);
   }
 
+  @Get('today-log')
+  @ApiOperation({ summary: 'Get the daily log entry for today' })
+  async getTodayLog(@Request() req) {
+    return this.trackerService.getTodayLog(req.user.userId);
+  }
+
   @Get('calendar')
   @ApiOperation({ summary: 'Get historical and predicted cycle dates' })
   async getCalendar(@Request() req) {
@@ -45,6 +51,12 @@ export class CycleTrackerController {
     const status = await this.trackerService.getDashboard(req.user.userId);
     const phase = status.status === 'ACTIVE' ? status.phase : 'General';
     return this.trackerService.getEducationCards(phase || 'General');
+  }
+
+  @Get('education/all')
+  @ApiOperation({ summary: 'Get all microlearning education cards' })
+  async getAllEducation() {
+    return this.trackerService.getAllEducation();
   }
 
   @Patch('cycle/:id')

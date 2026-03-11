@@ -20,6 +20,9 @@ export class Cycle {
   @Prop()
   cycleLength: Number;
 
+  @Prop()
+  periodLength: Number;
+
   @Prop({ default: false })
   isIrregular: boolean;
 

@@ -17,7 +17,7 @@ export class PredictionEngineService {
     @InjectModel(DailyLog.name) private logModel: Model<DailyLogDocument>,
   ) {}
 
-  async predictNextCycle(userId: string): Promise<{ predictedDate: Date; confidence: number; reason?: string }> {
+  async predictNextCycle(userId: string): Promise<{ predictedDate: Date; confidence: number; reason?: string; earlyWarning?: boolean; predictedPeriodLength?: number }> {
     const userObjectId = new Types.ObjectId(userId);
     const history = await this.cycleModel.find({ userId: userObjectId as any }).sort({ startDate: -1 }).limit(12);
 
@@ -73,6 +73,38 @@ export class PredictionEngineService {
         reason += ' (Fluctuating energy levels detected)';
     }
 
+    // Lifestyle Trigger Adjustment (travel, illness add uncertainty)
+    const triggerLogs = recentLogs.filter(l => 
+        (l.lifestyleTriggers || []).some((t: string) => ['travel', 'illness', 'sleep_changes'].includes(t?.toLowerCase()))
+    );
+    if (triggerLogs.length >= 2) {
+        baseCycleLength += 1;
+        confidence -= 0.05;
+        reason += ' (+1d for lifestyle disruptions)';
+    }
+
+    // Symptom-to-period correlation: cramps near last period end → likely starts 1 day earlier
+    const lastCycleForCorrelation = history[0];
+    let earlyWarning = false;
+    if (lastCycleForCorrelation?.endDate) {
+        const threeDaysBeforeEnd = new Date(lastCycleForCorrelation.endDate.getTime() - 3 * 24 * 60 * 60 * 1000);
+        const crampLogs = await this.logModel.find({
+            userId: userObjectId as any,
+            date: { $gte: threeDaysBeforeEnd, $lte: lastCycleForCorrelation.endDate },
+            symptoms: { $in: ['Cramps'] },
+        });
+        if (crampLogs.length >= 1) {
+            baseCycleLength -= 1;
+            earlyWarning = true;
+            reason += ' (-1d: cramp pattern detected near previous period end)';
+        }
+    }
+
+    // Predict period length from historical data
+    const avgPeriodLength = history
+        .filter(c => c.periodLength)
+        .reduce((acc, c, _, arr) => acc + Number(c.periodLength) / arr.length, 0) || 5;
+
     const lastCycle = history[0];
     const latestStart = lastCycle ? lastCycle.startDate : new Date();
     
@@ -85,7 +117,9 @@ export class PredictionEngineService {
     return { 
         predictedDate, 
         confidence: Math.max(confidence, 0.1),
-        reason
+        reason,
+        earlyWarning,
+        predictedPeriodLength: Math.round(avgPeriodLength),
     };
   }
 
