@@ -18,6 +18,67 @@ export class CycleTrackerService {
     private predictionEngine: PredictionEngineService,
   ) {}
 
+  async onboard(userId: string, data: { lastPeriodStart: string; periodLength: number; usualCycleLength?: number }) {
+    const userObjectId = new Types.ObjectId(userId);
+
+    // Prevent duplicate onboarding — if cycles already exist, skip
+    const existingCycles = await this.cycleModel.countDocuments({ userId: userObjectId as any });
+    if (existingCycles > 0) {
+      return { skipped: true, message: 'Cycle data already exists' };
+    }
+
+    const startDate = new Date(data.lastPeriodStart);
+    const periodLength = data.periodLength;
+    const cycleLength = data.usualCycleLength || 28;
+    const endDate = new Date(startDate.getTime() + (periodLength - 1) * 24 * 60 * 60 * 1000);
+
+    // Seed a completed historical cycle so prediction engine has real data
+    const historicalCycle = new this.cycleModel({
+      userId: userObjectId,
+      startDate,
+      endDate,
+      cycleLength,
+      periodLength,
+      confidenceScore: 0.5,
+    });
+    await historicalCycle.save();
+
+    // Now run prediction based on this seeded cycle
+    const prediction = await this.predictionEngine.predictNextCycle(userId);
+
+    // Update the seeded cycle with a prediction
+    historicalCycle.predictedNextDate = prediction.predictedDate;
+    historicalCycle.confidenceScore = prediction.confidence;
+    await historicalCycle.save();
+
+    // Seed daily flow logs for the period days so the calendar shows them
+    const logPromises: any[] = [];
+    for (let i = 0; i < periodLength; i++) {
+      const logDate = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+      // Heavier flow at the start, tapering off
+      const flowLevel = i === 0 ? 'heavy' : i < 2 ? 'medium' : 'light';
+      logPromises.push(
+        new this.logModel({
+          userId: userObjectId,
+          date: logDate,
+          flowLevel,
+          mood: 'neutral',
+          energy: 5,
+          symptoms: i === 0 ? ['Cramps'] : [],
+        }).save()
+      );
+    }
+    await Promise.all(logPromises);
+
+    return {
+      success: true,
+      predictedNextPeriod: prediction.predictedDate,
+      confidence: prediction.confidence,
+      cycleLength,
+      periodLength,
+    };
+  }
+
   async createLog(userId: string, logData: Partial<DailyLog>): Promise<DailyLog> {
     const userObjectId = new Types.ObjectId(userId);
     const newLog = new this.logModel({
