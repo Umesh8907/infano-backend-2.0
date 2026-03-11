@@ -11,6 +11,7 @@ import { JourneysModule } from './modules/journeys/journeys.module';
 import { QuestsModule } from './modules/quests/quests.module';
 import { InsightsModule } from './modules/insights/insights.module';
 import { CheckInModule } from './modules/check-in/check-in.module';
+import { CycleTrackerModule } from './modules/cycle-tracker/cycle-tracker.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { CheckInModule } from './modules/check-in/check-in.module';
     GamificationModule,
     InsightsModule,
     CheckInModule,
+    CycleTrackerModule,
   ],
 })
 export class AppModule { }
